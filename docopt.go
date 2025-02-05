@@ -639,4 +639,3 @@ func stringPartition(s, sep string) (string, string, string) {
 	split := strings.SplitN(s, sep, 2)
 	return split[0], sep, split[1]
 }
-
