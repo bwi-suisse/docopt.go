@@ -114,11 +114,6 @@ func parse(doc string, argv []string, help bool, version string, optionsFirst bo
 		argv = os.Args[1:]
 	}
 
-	environmentSections := parseSection("environment:", doc)
-	if len(environmentSections) > 0 {
-		fmt.Println("ENV SECTION:", environmentSections[0])
-	}
-
 	usageSections := parseSection("usage:", doc)
 
 	if len(usageSections) == 0 {
@@ -250,7 +245,7 @@ func parseDefaults(doc string) patternList {
 }
 
 func parseEnvironmentVariables(doc string) patternList {
-	defaults := patternList{}
+	envs := patternList{}
 	p := regexp.MustCompile(`\n[ \t]*(-\S+?)`)
 	for _, s := range parseSection("environment:", doc) {
 		// FIXME corner case "bla: options: --foo"
@@ -264,11 +259,11 @@ func parseEnvironmentVariables(doc string) patternList {
 				if err != nil {
 					panic("invalid environment variable definition: '" + optionDescription + "'")
 				}
-				defaults = append(defaults, envvar)
+				envs = append(envs, envvar)
 			}
 		}
 	}
-	return defaults
+	return envs
 }
 
 func parsePattern(source string, options *patternList) (*pattern, error) {
