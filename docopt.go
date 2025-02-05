@@ -114,6 +114,11 @@ func parse(doc string, argv []string, help bool, version string, optionsFirst bo
 		argv = os.Args[1:]
 	}
 
+	environmentSections := parseSection("environment:", doc)
+	if len(environmentSections) > 0 {
+		fmt.Println("ENV SECTION:", environmentSections[0])
+	}
+
 	usageSections := parseSection("usage:", doc)
 
 	if len(usageSections) == 0 {
@@ -140,6 +145,14 @@ func parse(doc string, argv []string, help bool, version string, optionsFirst bo
 	}
 
 	patternArgv, err := parseArgv(newTokenList(argv, errorUser), &options, optionsFirst)
+
+	passedOpts := make(patternList, 0)
+	for _, elem := range patternArgv {
+		if elem.t.String() == "option" {
+			passedOpts = append(passedOpts, &(*elem))
+		}
+	}
+
 	if err != nil {
 		output = handleError(err, usage)
 		return
@@ -178,6 +191,19 @@ func parse(doc string, argv []string, help bool, version string, optionsFirst bo
 			return
 		}
 		args = append(patFlat, *collected...).dictionary()
+		passedArgs := passedOpts.dictionary()
+		for _, env := range parseEnvironmentVariables(doc) {
+			// Sets option values from environment variables only if:
+			// 1. The option was not explicitly passed as a command-line argument, and
+			// 2. The corresponding environment variable is non-empty.
+			// This ensures that environment variables override default option values
+			// but do not override explicitly provided command-line arguments.
+			if passedArgs[env.name] == nil {
+				if envvar := os.Getenv(env.value.(string)); envvar != "" {
+					args[env.name] = envvar
+				}
+			}
+		}
 		return
 	}
 
@@ -217,6 +243,28 @@ func parseDefaults(doc string) patternList {
 			optionDescription := match[i][1] + split[i]
 			if strings.HasPrefix(optionDescription, "-") {
 				defaults = append(defaults, parseOption(optionDescription))
+			}
+		}
+	}
+	return defaults
+}
+
+func parseEnvironmentVariables(doc string) patternList {
+	defaults := patternList{}
+	p := regexp.MustCompile(`\n[ \t]*(-\S+?)`)
+	for _, s := range parseSection("environment:", doc) {
+		// FIXME corner case "bla: options: --foo"
+		_, _, s = stringPartition(s, ":") // get rid of "options:"
+		split := p.Split("\n"+s, -1)[1:]
+		match := p.FindAllStringSubmatch("\n"+s, -1)
+		for i := range split {
+			optionDescription := match[i][1] + split[i]
+			if strings.HasPrefix(optionDescription, "-") {
+				envvar, err := parseEnvironmentVariable(optionDescription)
+				if err != nil {
+					panic("invalid environment variable definition: '" + optionDescription + "'")
+				}
+				defaults = append(defaults, envvar)
 			}
 		}
 	}
@@ -306,6 +354,24 @@ func parseOption(optionDescription string) *pattern {
 		}
 	}
 	return newOption(short, long, argcount, value)
+}
+
+func parseEnvironmentVariable(envvarDescription string) (*pattern, error) {
+	option := parseOption(envvarDescription)
+
+	idx := strings.Index(envvarDescription, "  ")
+
+	re := regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+
+	if idx != -1 {
+		name := strings.TrimSpace(envvarDescription[idx:])
+		if !re.MatchString(name) {
+			return nil, fmt.Errorf("invalid environment variable name '%s'", name)
+		}
+		return newEnvironmentVariable(option, name), nil
+	} else {
+		return nil, fmt.Errorf("invalid environment variable description: '%s'", envvarDescription)
+	}
 }
 
 func parseExpr(tokens *tokenList, options *patternList) (patternList, error) {
@@ -573,3 +639,4 @@ func stringPartition(s, sep string) (string, string, string) {
 	split := strings.SplitN(s, sep, 2)
 	return split[0], sep, split[1]
 }
+

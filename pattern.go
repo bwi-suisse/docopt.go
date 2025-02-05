@@ -13,6 +13,7 @@ const (
 	patternArgument patternType = 1 << iota
 	patternCommand
 	patternOption
+	patternEnvironmentVariable
 
 	// branch
 	patternRequired
@@ -59,6 +60,8 @@ func (pt patternType) String() string {
 		return "all"
 	case patternDefault:
 		return "default"
+	case patternEnvironmentVariable:
+		return "environment_variable"
 	}
 	return ""
 }
@@ -148,6 +151,14 @@ func newOption(short, long string, argcount int, value interface{}) *pattern {
 	} else {
 		p.value = value
 	}
+	return &p
+}
+
+func newEnvironmentVariable(opt *pattern, name string) *pattern {
+	var p pattern
+	p.t = patternEnvironmentVariable
+	p.name = opt.name
+	p.value = name
 	return &p
 }
 
@@ -548,3 +559,4 @@ func (pl patternList) dictionary() map[string]interface{} {
 	}
 	return dict
 }
+
